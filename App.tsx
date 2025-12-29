@@ -1,15 +1,37 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
-import Header from './components/Header';
+import React, { useState, useEffect } from 'react';
+import TopBar from './components/TopBar';
+import BottomDock from './components/BottomDock';
+import SidePanel from './components/SidePanel';
 import LandPlot from './components/LandPlot';
-import { LandState, LandStatus, PlayerState } from './types';
-import { CROPS, INITIAL_GOLD, INITIAL_LAND_COUNT } from './constants';
+import Farmhouse from './components/Farmhouse';
+import WeatherEffects from './components/WeatherEffects';
+import Warehouse from './components/Warehouse';
+import { Tree, Decoration, MagicVine, Mine, Fence } from './components/Environment';
+import { LandState, LandStatus, PlayerState, WeatherType } from './types';
+import { CROPS, INITIAL_GOLD, INITIAL_LAND_COUNT, XP_PER_LEVEL } from './constants';
 
-const STORAGE_KEY_LANDS = 'tiny_farm_lands';
-const STORAGE_KEY_PLAYER = 'tiny_farm_player';
+const STORAGE_KEY_PLAYER = 'dream_manor_v1';
+const STORAGE_KEY_LANDS = 'dream_lands_v1';
 
 const App: React.FC = () => {
-  // --- State Initialization ---
+  const [player, setPlayer] = useState<PlayerState>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_PLAYER);
+    if (saved) return JSON.parse(saved);
+    return {
+      gold: INITIAL_GOLD,
+      silver: 329994,
+      gems: 500,
+      energy: 145,
+      maxEnergy: 200,
+      vip: 1,
+      level: 1,
+      xp: 0,
+      maxXp: XP_PER_LEVEL,
+      name: '农场主 菲利克斯'
+    };
+  });
+
   const [lands, setLands] = useState<LandState[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_LANDS);
     if (saved) return JSON.parse(saved);
@@ -17,174 +39,146 @@ const App: React.FC = () => {
       id: i,
       status: LandStatus.EMPTY,
       cropId: null,
-      startTime: null
+      startTime: null,
+      isBuggy: false,
+      isWeedy: false,
+      isDry: false,
     }));
   });
 
-  const [player, setPlayer] = useState<PlayerState>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_PLAYER);
-    if (saved) return JSON.parse(saved);
-    return {
-      gold: INITIAL_GOLD,
-      seeds: {}
-    };
-  });
-
-  const [notification, setNotification] = useState<{msg: string, type: 'success' | 'error' | 'info'} | null>(null);
-
-  // --- Persistence ---
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_LANDS, JSON.stringify(lands));
-  }, [lands]);
+  const [activeSeedId, setActiveSeedId] = useState<string | null>(null);
+  const [isWarehouseOpen, setIsWarehouseOpen] = useState(false);
+  const [weather, setWeather] = useState<WeatherType>(WeatherType.SUNNY);
+  const [notification, setNotification] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_PLAYER, JSON.stringify(player));
-  }, [player]);
+    localStorage.setItem(STORAGE_KEY_LANDS, JSON.stringify(lands));
+  }, [player, lands]);
 
-  // --- Helpers ---
-  const notify = (msg: string, type: 'success' | 'error' | 'info' = 'info') => {
+  const notify = (msg: string, type: 'success' | 'error' = 'success') => {
     setNotification({ msg, type });
     setTimeout(() => setNotification(null), 3000);
   };
 
-  // --- Game Actions ---
-  const handlePlant = (landId: number, cropId: string) => {
-    const crop = CROPS.find(c => c.id === cropId);
-    if (!crop) return;
-
-    if (player.gold < crop.buyPrice) {
-      notify("Not enough gold!", 'error');
+  const handlePlant = (landId: number) => {
+    if (!activeSeedId) {
+      notify("请先打开仓库选择种子 🎒", 'error');
+      setIsWarehouseOpen(true);
       return;
     }
-
-    setPlayer(prev => ({ ...prev, gold: prev.gold - crop.buyPrice }));
-    setLands(prev => prev.map(l => 
-      l.id === landId 
-        ? { ...l, status: LandStatus.GROWING, cropId, startTime: Date.now() } 
-        : l
-    ));
-    notify(`Planted ${crop.name}!`, 'success');
+    const crop = CROPS.find(c => c.id === activeSeedId);
+    if (!crop || player.gold < crop.buyPrice) {
+      notify("金币不足！", 'error');
+      return;
+    }
+    setPlayer(prev => ({ 
+      ...prev, 
+      gold: prev.gold - crop.buyPrice, 
+      energy: Math.max(0, prev.energy - 5) 
+    }));
+    setLands(prev => prev.map(l => l.id === landId ? { 
+      ...l, 
+      status: LandStatus.GROWING, 
+      cropId: activeSeedId, 
+      startTime: Date.now()
+    } : l));
+    notify(`成功播种：${crop.name} 🌱`);
   };
 
   const handleHarvest = (landId: number) => {
     const land = lands.find(l => l.id === landId);
-    if (!land || !land.cropId) return;
-
+    if (!land?.cropId) return;
     const crop = CROPS.find(c => c.id === land.cropId);
     if (!crop) return;
-
-    // Logic: Is it actually ready? Double check in parent state
-    const elapsedSeconds = (Date.now() - (land.startTime || 0)) / 1000;
-    if (elapsedSeconds < crop.growthTime) {
-      notify("Not ready yet!", 'error');
-      return;
-    }
-
-    setPlayer(prev => ({ ...prev, gold: prev.gold + crop.sellPrice }));
-    setLands(prev => prev.map(l => 
-      l.id === landId 
-        ? { ...l, status: LandStatus.EMPTY, cropId: null, startTime: null } 
-        : l
-    ));
-    notify(`Harvested ${crop.name}! +${crop.sellPrice} Gold`, 'success');
+    setPlayer(prev => ({ ...prev, silver: prev.silver + crop.sellPrice * 10 }));
+    setLands(prev => prev.map(l => l.id === landId ? { 
+      ...l, 
+      status: LandStatus.EMPTY, 
+      cropId: null, 
+      startTime: null 
+    } : l));
+    notify(`收获成功：${crop.name}！✨`);
   };
-
-  const resetGame = () => {
-    if (confirm("Reset all progress?")) {
-      localStorage.clear();
-      window.location.reload();
-    }
-  };
-
-  // --- Real-time Check (Global Sync) ---
-  // Every 5 seconds, ensure ready states are synchronized 
-  // (Mostly relevant for background calculations or status refreshes)
-  useEffect(() => {
-    const checkInterval = setInterval(() => {
-      setLands(prevLands => prevLands.map(l => {
-        if (l.status === LandStatus.GROWING && l.startTime && l.cropId) {
-          const crop = CROPS.find(c => c.id === l.cropId);
-          if (crop) {
-            const elapsed = (Date.now() - l.startTime) / 1000;
-            // Note: In a larger app, we'd update status to READY here.
-            // For this UI, the individual tiles handle their local display of "READY"
-            // based on the same startTime check.
-          }
-        }
-        return l;
-      }));
-    }, 5000);
-    return () => clearInterval(checkInterval);
-  }, []);
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-100">
-      <Header gold={player.gold} />
+    <div className="min-h-screen relative overflow-hidden bg-[#e6ce8a] font-sans selection:bg-emerald-200">
+      <div className="absolute inset-0 z-0">
+        <div className="absolute inset-0 bg-gradient-to-b from-[#7DD3FC] via-[#fdf7e0] to-[#e4c97c]"></div>
+        <div className="absolute bottom-0 left-0 right-0 h-[60%] bg-[#d4b465] rounded-t-[50%] blur-3xl opacity-40 translate-y-1/2"></div>
+      </div>
+      
+      <WeatherEffects weather={weather} />
+      <TopBar player={player} weather={weather} />
+      <SidePanel />
+      <BottomDock onOpenWarehouse={() => setIsWarehouseOpen(true)} />
 
-      <main className="flex-1 max-w-4xl mx-auto w-full px-6 py-8">
-        {/* Game Info / HUD */}
-        <div className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
-          <div>
-            <h2 className="text-3xl font-extrabold text-slate-800 tracking-tight">Your Farm</h2>
-            <p className="text-slate-500 font-medium">Click on a plot to start planting.</p>
-          </div>
-          
-          <button 
-            onClick={resetGame}
-            className="text-xs font-bold text-slate-400 hover:text-red-500 transition-colors uppercase tracking-widest border border-slate-300 rounded px-2 py-1 hover:border-red-200"
-          >
-            Reset Progress
-          </button>
-        </div>
-
-        {/* The Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-6 md:gap-8">
-          {lands.map(land => (
-            <LandPlot 
-              key={land.id}
-              land={land}
-              gold={player.gold}
-              availableCrops={CROPS}
-              onPlant={handlePlant}
-              onHarvest={handleHarvest}
-            />
-          ))}
-        </div>
-
-        {/* Log / Instructions */}
-        <div className="mt-12 bg-white/50 border border-slate-200 rounded-2xl p-6 backdrop-blur-sm">
-          <h3 className="font-bold text-slate-700 mb-2 flex items-center gap-2">
-            <span>📖</span> Farmer's Handbook
-          </h3>
-          <ul className="text-sm text-slate-600 space-y-2 list-disc list-inside">
-            <li>Buy seeds with gold. Better seeds take longer but sell for more.</li>
-            <li>Crops grow in <strong>real time</strong> even if you leave the page.</li>
-            <li>Wait for the gold glow and "READY" badge to harvest.</li>
-            <li>Harvesting returns the profit to your gold balance.</li>
-          </ul>
-        </div>
-      </main>
-
-      {/* Persistent Notification Toast */}
-      {notification && (
-        <div className={`
-          fixed bottom-6 right-6 px-6 py-3 rounded-xl shadow-2xl border-2 z-50 animate-in slide-in-from-right-full
-          ${notification.type === 'success' ? 'bg-green-50 border-green-200 text-green-700' : ''}
-          ${notification.type === 'error' ? 'bg-red-50 border-red-200 text-red-700' : ''}
-          ${notification.type === 'info' ? 'bg-blue-50 border-blue-200 text-blue-700' : ''}
-        `}>
-          <div className="flex items-center gap-3">
-            <span className="text-xl">
-              {notification.type === 'success' ? '✨' : notification.type === 'error' ? '⚠️' : 'ℹ️'}
-            </span>
-            <span className="font-bold">{notification.msg}</span>
-          </div>
+      {activeSeedId && (
+        <div className="fixed bottom-32 left-1/2 -translate-x-1/2 z-[90] animate-bounce">
+           <div className="bg-white/90 backdrop-blur-sm px-4 py-2 rounded-full border-2 border-emerald-500 shadow-xl flex items-center gap-2">
+              <span className="text-2xl">{CROPS.find(c => c.id === activeSeedId)?.emoji}</span>
+              <span className="text-xs font-black text-emerald-800 tracking-wider">准备播种：{CROPS.find(c => c.id === activeSeedId)?.name}</span>
+              <button onClick={() => setActiveSeedId(null)} className="ml-2 text-red-500 font-bold hover:scale-125 transition-transform">✕</button>
+           </div>
         </div>
       )}
 
-      <footer className="py-6 text-center text-slate-400 text-xs font-medium uppercase tracking-tighter">
-        &copy; {new Date().getFullYear()} Mini Farm Demo &bull; Core Loop MVP
-      </footer>
+      <main className="relative z-10 pt-44 pb-48 flex flex-col items-center">
+        <div className="relative">
+          <Farmhouse />
+          <MagicVine style={{ top: '0px', left: '-400px' }} />
+          <Mine style={{ top: '-100px', right: '-450px' }} />
+          <Tree style={{ top: '-250px', left: '-500px' }} />
+          <Decoration emoji="🧺" style={{ bottom: '200px', left: '-350px' }} />
+          <Decoration emoji="🚜" style={{ top: '350px', right: '-400px' }} />
+          <Fence orientation="h" style={{ top: '300px', left: '-300px' }} />
+          <Fence orientation="v" style={{ top: '300px', left: '-300px' }} />
+
+          <div className="perspective-[2500px] flex items-center justify-center p-24">
+            <div 
+              className="grid grid-cols-4 gap-8 p-12 rounded-[2rem] bg-[#8B4513]/20 backdrop-blur-[1px] border-b-[24px] border-[#3E1E09]/40 shadow-2xl relative"
+              style={{ 
+                transform: 'rotateX(55deg) rotateZ(-35deg)',
+                transformStyle: 'preserve-3d'
+              }}
+            >
+              <div className="absolute inset-0 bg-[#5D2E0E] rounded-[2rem] -z-10 shadow-inner opacity-80"></div>
+              {lands.map(land => (
+                <div key={land.id} style={{ transform: 'translateZ(10px)' }}>
+                  <LandPlot 
+                    land={land}
+                    gold={player.gold}
+                    availableCrops={CROPS}
+                    onPlant={() => handlePlant(land.id)}
+                    onHarvest={handleHarvest}
+                    onAction={() => {}} 
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <Warehouse 
+        isOpen={isWarehouseOpen} 
+        onClose={() => setIsWarehouseOpen(false)}
+        crops={CROPS}
+        gold={player.gold}
+        onSelectSeed={(id) => {
+          setActiveSeedId(id);
+          setIsWarehouseOpen(false);
+          notify(`种子已选中 ✨`);
+        }}
+      />
+
+      {notification && (
+        <div className="fixed top-32 left-1/2 -translate-x-1/2 z-[200] animate-bounce pointer-events-none">
+           <div className="px-8 py-3 bg-[#5D2E0E] border-2 border-amber-400 rounded-full shadow-2xl text-amber-50 font-black text-sm">
+             {notification.msg}
+           </div>
+        </div>
+      )}
     </div>
   );
 };

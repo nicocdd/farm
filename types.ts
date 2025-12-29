@@ -5,6 +5,13 @@ export enum LandStatus {
   READY = 'READY'
 }
 
+export enum WeatherType {
+  SUNNY = '晴朗',
+  RAINY = '小雨',
+  STORMY = '雷阵雨',
+  FOGGY = '大雾'
+}
+
 export interface Crop {
   id: string;
   name: string;
@@ -13,16 +20,28 @@ export interface Crop {
   sellPrice: number;
   color: string;
   emoji: string;
+  xp: number;
 }
 
 export interface LandState {
   id: number;
   status: LandStatus;
   cropId: string | null;
-  startTime: number | null; // Unix Timestamp (ms)
+  startTime: number | null;
+  isBuggy: boolean;
+  isWeedy: boolean;
+  isDry: boolean;
 }
 
 export interface PlayerState {
   gold: number;
-  seeds: Record<string, number>;
+  silver: number;
+  gems: number;
+  energy: number;
+  maxEnergy: number;
+  level: number;
+  xp: number;
+  maxXp: number;
+  name: string;
+  vip: number;
 }

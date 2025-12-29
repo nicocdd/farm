@@ -5,15 +5,16 @@ import { CROPS } from '../constants';
 
 interface LandPlotProps {
   land: LandState;
-  onPlant: (landId: number, cropId: string) => void;
+  onPlant: () => void;
   onHarvest: (landId: number) => void;
+  onAction: (landId: number, action: 'water' | 'weed' | 'pest') => void;
   availableCrops: Crop[];
   gold: number;
 }
 
-const LandPlot: React.FC<LandPlotProps> = ({ land, onPlant, onHarvest, availableCrops, gold }) => {
+const LandPlot: React.FC<LandPlotProps> = ({ land, onPlant, onHarvest, onAction, availableCrops, gold }) => {
   const [progress, setProgress] = useState(0);
-  const [showSeedMenu, setShowSeedMenu] = useState(false);
+  const [showActionMenu, setShowActionMenu] = useState(false);
   const currentCrop = land.cropId ? CROPS.find(c => c.id === land.cropId) : null;
 
   const calculateStatus = useCallback(() => {
@@ -21,129 +22,115 @@ const LandPlot: React.FC<LandPlotProps> = ({ land, onPlant, onHarvest, available
       const elapsedSeconds = (Date.now() - land.startTime) / 1000;
       const pct = Math.min(100, (elapsedSeconds / currentCrop.growthTime) * 100);
       setProgress(pct);
-
-      if (pct >= 100) {
-        // Technically this should be handled by the parent or an effect, 
-        // but for a demo we can let the UI detect completion.
-      }
     }
   }, [land.status, land.startTime, currentCrop]);
 
   useEffect(() => {
     let interval: number | undefined;
     if (land.status === LandStatus.GROWING) {
-      interval = window.setInterval(calculateStatus, 1000);
-      calculateStatus(); // initial check
+      interval = window.setInterval(calculateStatus, 500);
+      calculateStatus();
     } else {
       setProgress(0);
     }
     return () => clearInterval(interval);
   }, [land.status, calculateStatus]);
 
-  // Derived status for UI
   const isReady = progress >= 100 && land.status === LandStatus.GROWING;
 
-  const handlePlotClick = () => {
+  const handlePlotClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (land.status === LandStatus.EMPTY) {
-      setShowSeedMenu(!showSeedMenu);
-    } else if (isReady) {
-      onHarvest(land.id);
+      onPlant();
+    } else {
+      setShowActionMenu(true);
     }
   };
 
-  const handlePlantSeed = (cropId: string) => {
-    onPlant(land.id, cropId);
-    setShowSeedMenu(false);
-  };
-
   return (
-    <div className="relative group">
-      {/* Land Tile */}
+    <div className="relative group select-none">
       <div 
         onClick={handlePlotClick}
         className={`
-          relative w-full aspect-square rounded-2xl border-4 cursor-pointer transition-all duration-300 transform active:scale-95
-          ${land.status === LandStatus.EMPTY ? 'bg-amber-800/20 border-amber-900/10 hover:bg-amber-800/30' : ''}
-          ${land.status === LandStatus.GROWING && !isReady ? 'bg-amber-900/40 border-amber-900/20' : ''}
-          ${isReady ? 'bg-amber-900/60 border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.5)]' : ''}
+          relative w-36 h-36 rounded-[2.5rem] transition-all duration-300 transform-gpu
+          hover:scale-105 active:scale-95 cursor-pointer shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden
+          border-x-[6px] border-[#3E1E09]
+          ${land.status === LandStatus.EMPTY 
+            ? 'bg-gradient-to-br from-[#5D2E0E] to-[#2D1102] border-b-[20px] border-[#1a0f08]' 
+            : 'bg-gradient-to-br from-[#78350F] to-[#3E1E09] border-b-[20px] border-[#2D1102]'}
+          ${isReady ? 'border-yellow-500 shadow-[0_0_60px_rgba(234,179,8,0.7)] brightness-110' : ''}
         `}
       >
-        {/* Soil Texture Simulation */}
-        <div className="absolute inset-2 border border-dashed border-white/5 rounded-xl pointer-events-none"></div>
+        <div className="absolute inset-0 opacity-30 bg-[url('https://www.transparenttextures.com/patterns/natural-paper.png')] pointer-events-none"></div>
 
-        {/* Content */}
-        <div className="h-full flex flex-col items-center justify-center p-2 relative overflow-hidden">
-          {land.status === LandStatus.EMPTY && (
-            <div className="flex flex-col items-center opacity-40 group-hover:opacity-100 transition-opacity">
-              <span className="text-4xl">🕳️</span>
-              <span className="text-xs font-bold text-amber-900 mt-2">EMPTY</span>
-            </div>
-          )}
+        <div className="h-full flex flex-col items-center justify-center relative">
+          <div className="absolute top-4 flex gap-2 z-10">
+            {land.isBuggy && <span className="text-2xl drop-shadow-lg animate-bounce">🐛</span>}
+            {land.isWeedy && <span className="text-2xl drop-shadow-lg animate-pulse">🌿</span>}
+            {land.isDry && <span className="text-2xl drop-shadow-lg opacity-80">🏜️</span>}
+          </div>
 
-          {currentCrop && land.status !== LandStatus.EMPTY && (
-            <>
-              <div className={`text-5xl transition-all duration-1000 ${isReady ? 'scale-125' : 'scale-75 animate-pulse'}`}>
+          {currentCrop && (
+            <div className="relative flex flex-col items-center">
+              <div className={`
+                text-8xl transition-all duration-700 filter drop-shadow-[0_20px_20px_rgba(0,0,0,0.5)]
+                ${isReady ? 'scale-110 animate-[landBounce_1s_infinite]' : 'scale-50 opacity-90 animate-pulse'}
+              `}
+              style={{ transform: 'translateY(-20px)' }}>
                 {currentCrop.emoji}
               </div>
               
-              {!isReady && (
-                <div className="absolute bottom-4 left-4 right-4 h-2 bg-black/20 rounded-full overflow-hidden">
+              {!isReady && land.status === LandStatus.GROWING && (
+                <div className="absolute -bottom-6 w-24 h-4 bg-black/60 rounded-full border-2 border-[#8B4513] overflow-hidden shadow-inner">
                   <div 
-                    className="h-full bg-green-400 transition-all duration-1000" 
+                    className="h-full bg-gradient-to-r from-emerald-500 to-green-400 shadow-[0_0_15px_rgba(52,211,153,0.8)]" 
                     style={{ width: `${progress}%` }}
                   />
                 </div>
               )}
-
-              {isReady && (
-                <div className="absolute top-2 right-2 animate-bounce">
-                  <span className="bg-yellow-400 text-yellow-900 text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
-                    READY!
-                  </span>
-                </div>
-              )}
-            </>
+            </div>
           )}
         </div>
       </div>
 
-      {/* Seed Selection Popover */}
-      {showSeedMenu && (
-        <div className="absolute z-20 top-full mt-2 left-0 right-0 bg-white rounded-xl shadow-xl border border-slate-200 p-3 grid grid-cols-1 gap-2 animate-in fade-in slide-in-from-top-2">
-          <div className="flex justify-between items-center mb-1">
-            <span className="text-xs font-bold text-slate-500 uppercase">Select Seed</span>
-            <button onClick={() => setShowSeedMenu(false)} className="text-slate-400 hover:text-slate-600">×</button>
-          </div>
-          {availableCrops.map(crop => (
-            <button
-              key={crop.id}
-              disabled={gold < crop.buyPrice}
-              onClick={(e) => {
-                e.stopPropagation();
-                handlePlantSeed(crop.id);
-              }}
-              className={`
-                flex items-center justify-between p-2 rounded-lg border text-sm transition-colors
-                ${gold >= crop.buyPrice 
-                  ? 'hover:bg-green-50 border-slate-100 hover:border-green-200 cursor-pointer' 
-                  : 'opacity-50 grayscale cursor-not-allowed border-transparent bg-slate-50'}
-              `}
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-xl">{crop.emoji}</span>
-                <div className="text-left">
-                  <div className="font-bold text-slate-700">{crop.name}</div>
-                  <div className="text-[10px] text-slate-500">{crop.growthTime}s growth</div>
+      {showActionMenu && (
+        <>
+          <div className="fixed inset-0 z-[150] bg-black/50 backdrop-blur-[4px]" onClick={() => setShowActionMenu(false)}></div>
+          <div className={`
+            fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[160]
+            animate-[popIn_0.4s_cubic-bezier(0.175,0.885,0.32,1.275)]
+          `}>
+            <div className="bg-[#5D2E0E] rounded-[2.5rem] p-5 shadow-[0_40px_80px_rgba(0,0,0,0.6)] border-[10px] border-[#3E1E09] flex gap-6 relative">
+              {isReady ? (
+                <button 
+                  onClick={(e) => { e.stopPropagation(); onHarvest(land.id); setShowActionMenu(false); }}
+                  className="w-24 h-24 rounded-full bg-gradient-to-br from-amber-400 to-orange-600 shadow-[0_10px_20px_rgba(0,0,0,0.5)] flex flex-col items-center justify-center border-4 border-[#FFD700] hover:scale-110 active:translate-y-2 transition-all relative z-10"
+                >
+                  <span className="text-4xl drop-shadow-lg">🧺</span>
+                  <span className="text-[12px] font-black text-white uppercase drop-shadow-md">收割</span>
+                </button>
+              ) : (
+                <div className="flex gap-4 relative z-10">
+                  <button onClick={() => onAction(land.id, 'water')} className="w-16 h-16 rounded-2xl bg-gradient-to-b from-[#8B4513] to-[#5D2E0E] border-2 border-[#CD7F32] shadow-xl text-3xl hover:brightness-125 transition-all">💧</button>
+                  <button onClick={() => onAction(land.id, 'weed')} className="w-16 h-16 rounded-2xl bg-gradient-to-b from-[#8B4513] to-[#5D2E0E] border-2 border-[#CD7F32] shadow-xl text-3xl hover:brightness-125 transition-all">🌿</button>
+                  <button onClick={() => onAction(land.id, 'pest')} className="w-16 h-16 rounded-2xl bg-gradient-to-b from-[#8B4513] to-[#5D2E0E] border-2 border-[#CD7F32] shadow-xl text-3xl hover:brightness-125 transition-all">🧪</button>
                 </div>
-              </div>
-              <div className="flex items-center gap-1 font-bold text-yellow-600">
-                <span>{crop.buyPrice}</span>
-                <span className="text-[10px]">💰</span>
-              </div>
-            </button>
-          ))}
-        </div>
+              )}
+            </div>
+          </div>
+        </>
       )}
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes landBounce {
+          0%, 100% { transform: translateY(-20px) scale(1.1); }
+          50% { transform: translateY(-35px) scale(1.2); }
+        }
+        @keyframes popIn {
+          from { transform: translate(-50%, -40%) scale(0.8); opacity: 0; }
+          to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+      `}} />
     </div>
   );
 };

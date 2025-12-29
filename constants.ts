@@ -4,41 +4,46 @@ import { Crop } from './types';
 export const CROPS: Crop[] = [
   {
     id: 'radish',
-    name: 'White Radish',
-    growthTime: 30, // 30 seconds for demo
+    name: '白萝卜',
+    growthTime: 15, 
     buyPrice: 10,
     sellPrice: 25,
-    color: 'bg-white border-slate-200',
+    xp: 5,
+    color: 'from-white to-slate-100',
     emoji: '🥕'
   },
   {
-    id: 'cabbage',
-    name: 'Cabbage',
-    growthTime: 60, // 1 minute
-    buyPrice: 20,
-    sellPrice: 55,
-    color: 'bg-green-100 border-green-300',
-    emoji: '🥬'
+    id: 'tomato',
+    name: '西红柿',
+    growthTime: 45,
+    buyPrice: 40,
+    sellPrice: 110,
+    xp: 12,
+    color: 'from-red-400 to-red-600',
+    emoji: '🍅'
   },
   {
     id: 'corn',
-    name: 'Golden Corn',
-    growthTime: 120, // 2 minutes
-    buyPrice: 50,
-    sellPrice: 150,
-    color: 'bg-yellow-100 border-yellow-300',
+    name: '玉米',
+    growthTime: 90,
+    buyPrice: 85,
+    sellPrice: 240,
+    xp: 25,
+    color: 'from-yellow-300 to-yellow-500',
     emoji: '🌽'
   },
   {
     id: 'watermelon',
-    name: 'Watermelon',
-    growthTime: 300, // 5 minutes
-    buyPrice: 100,
-    sellPrice: 350,
-    color: 'bg-green-200 border-green-500',
+    name: '大西瓜',
+    growthTime: 300,
+    buyPrice: 200,
+    sellPrice: 750,
+    xp: 60,
+    color: 'from-green-400 to-green-700',
     emoji: '🍉'
   }
 ];
 
-export const INITIAL_LAND_COUNT = 6;
-export const INITIAL_GOLD = 100;
+export const INITIAL_LAND_COUNT = 12;
+export const INITIAL_GOLD = 500;
+export const XP_PER_LEVEL = 100;
